@@ -130,3 +130,6 @@ dmypy.json
 
 # Test files
 test.txt
+testdir
+dir1
+dir2
