@@ -46,6 +46,7 @@ def modify_sync_file(directory):
     json_data = {}
 
     # Check if .sync file exists
+    # Sync file doesn't exist so its created and populated with data
     if (not os.path.exists(path)):
         with open (path, 'w') as f:
             for filename in os.listdir(directory):
@@ -55,7 +56,41 @@ def modify_sync_file(directory):
                     json_data[filename] = [[modified_time(path), gen_hash(path)]]
             f.write(json.dumps(json_data))
     else:
-        pass
+        # Sync file exists and we have to update its contents
+        # Load json file
+        try:
+            with open (path) as json_file:
+                data = json.load(json_file)
+        except json.JSONDecodeError:
+            data = {}
+        
+        with open (path, 'w+') as f:
+
+            # Json file is empty
+            if data == {}:
+                for filename in os.listdir(directory):
+                    path = os.path.join(directory, filename)
+                    # Check if its a file
+                    if os.path.isfile(path) and filename != '.sync.json':
+                        data[filename] = [[modified_time(path), gen_hash(path)]]
+                f.write(json.dumps(data))
+            else: # Json file is not empty so contents can be updated
+                for filename in os.listdir(directory):
+                    path = os.path.join(directory, filename)
+
+                    # Check if its a file
+                    if os.path.isfile(path) and filename != '.sync.json':   
+                        latest_modified_time = data[filename][0][0]
+                        latest_hash = data[filename][0][1]
+
+                        # Check if file has been modified
+                        if (gen_hash(path) != latest_hash or modified_time(path) != latest_modified_time):
+                            data[filename].insert(0, [modified_time(path), gen_hash(path)])
+            
+                # Write new sync data to json file
+                f.write(json.dumps(data))
+
+            
 
 if __name__ == '__main__':
     directory = 'dir1'
