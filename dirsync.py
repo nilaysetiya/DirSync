@@ -1,7 +1,7 @@
 import hashlib
-import os
+import os, sys
 import datetime
-from time import gmtime, strftime
+from time import gmtime, strftime, ctime
 import json
 
 def gen_hash(path):
@@ -31,8 +31,12 @@ def modified_time(path):
         string : last modifed time
     """
     time = os.path.getmtime(path)
-    date = datetime.datetime.fromtimestamp(int(time)).strftime('%Y-%m-%d %H:%M:%S')
-    timezone = strftime('%z', gmtime())
+    date = datetime.datetime.fromtimestamp(int(time))
+    timezone = str(date - datetime.datetime.utcfromtimestamp(int(time)))
+    if '-' in timezone:
+        timezone = '-' + timezone[8:10] + timezone[11:13]
+    else:
+        timezone = '+' + timezone[0:2] + timezone[3:5]
     return str(date) + " " + str(timezone)
 
 def modify_sync_file(directory):
@@ -52,7 +56,7 @@ def modify_sync_file(directory):
             for filename in os.listdir(directory):
                 path = os.path.join(directory, filename)
                 # Check if its a file
-                if os.path.isfile(path) and filename != '.sync.json':
+                if os.path.isfile(path) and filename[0] != '.':
                     json_data[filename] = [[modified_time(path), gen_hash(path)]]
             f.write(json.dumps(json_data))
     else:
@@ -71,7 +75,7 @@ def modify_sync_file(directory):
                 for filename in os.listdir(directory):
                     path = os.path.join(directory, filename)
                     # Check if its a file
-                    if os.path.isfile(path) and filename != '.sync.json':
+                    if os.path.isfile(path) and filename[0] != '.':
                         data[filename] = [[modified_time(path), gen_hash(path)]]
                 f.write(json.dumps(data))
             else: # Json file is not empty so contents can be updated
@@ -79,7 +83,7 @@ def modify_sync_file(directory):
                     path = os.path.join(directory, filename)
 
                     # Check if its a file
-                    if os.path.isfile(path) and filename != '.sync.json':   
+                    if os.path.isfile(path) and filename[0] != '.':   
                         latest_modified_time = data[filename][0][0]
                         latest_hash = data[filename][0][1]
 
@@ -90,10 +94,39 @@ def modify_sync_file(directory):
                 # Write new sync data to json file
                 f.write(json.dumps(data))
 
-            
+def sync(dir1, dir2):
+
+    modify_sync_file(dir1)
+    modify_sync_file(dir2)
+
+    # load json data for dir1
+    try:
+        with open (os.path.join(dir1, '.sync.json')) as json_file:
+            dir1_data = json.load(json_file)
+    except json.JSONDecodeError:
+        dir1_data = {}
+
+    #load json data for dir2
+    try:
+        with open (os.path.join(dir2, '.sync.json')) as json_file:
+            dir2_data = json.load(json_file)
+    except json.JSONDecodeError:
+        dir2_data = {}
+
+    print(dir1_data)
+    print(dir2_data)
+    for file1 in os.listdir(dir1):
+        for file2 in os.listdir(dir2):
+            if (file1 == file2):
+                pass
+
+                  
 
 if __name__ == '__main__':
-    directory = 'dir1'
-    modify_sync_file(directory)
+    dir1 = sys.argv[1]
+    dir2 = sys.argv[2]
+    #sync("dir1", "dir2")
+    sync(dir1, dir2)
+
     
             
