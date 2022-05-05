@@ -1,8 +1,33 @@
+from fileinput import filename
 import hashlib
-import os, sys
+import os, sys, time
 import datetime
 from time import gmtime, strftime, ctime
 import json
+import shutil
+
+def change_modification_time(path, date):
+    """
+    Changes the modification time for a file
+
+    Parameters:
+        path : path to the file
+        date : datetime object 
+    """
+    mod_time = time.mktime(date.timetuple())
+    os.utime(path, (mod_time, mod_time))
+
+def date_to_datetime(date):
+    """
+    Changes date and time string to datetime object
+
+    Parameters:
+        date : date and time string
+    
+    Returns:
+        datetime : datetime object 
+    """
+    return datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S %z')
 
 def gen_hash(path):
     """
@@ -46,7 +71,7 @@ def modify_sync_file(directory):
     Parameters:
         directory : path to the directory
     """
-    path = os.path.join(directory, '.sync.json')
+    path = os.path.join(directory, '.sync')
     json_data = {}
 
     # Check if .sync file exists
@@ -58,7 +83,7 @@ def modify_sync_file(directory):
                 # Check if its a file
                 if os.path.isfile(path) and filename[0] != '.':
                     json_data[filename] = [[modified_time(path), gen_hash(path)]]
-            f.write(json.dumps(json_data))
+            f.write(json.dumps(json_data, indent=4))
     else:
         # Sync file exists and we have to update its contents
         # Load json file
@@ -77,7 +102,7 @@ def modify_sync_file(directory):
                     # Check if its a file
                     if os.path.isfile(path) and filename[0] != '.':
                         data[filename] = [[modified_time(path), gen_hash(path)]]
-                f.write(json.dumps(data))
+                f.write(json.dumps(data, indent=4))
             else: # Json file is not empty so contents can be updated
                 for filename in os.listdir(directory):
                     path = os.path.join(directory, filename)
@@ -88,45 +113,130 @@ def modify_sync_file(directory):
                         latest_hash = data[filename][0][1]
 
                         # Check if file has been modified
-                        if (gen_hash(path) != latest_hash or modified_time(path) != latest_modified_time):
+                        if (gen_hash(path) != latest_hash):
                             data[filename].insert(0, [modified_time(path), gen_hash(path)])
+                        
+                        if (modified_time(path) != latest_modified_time and gen_hash(path) == latest_hash):
+                            # Change modification time of the file
+                            change_modification_time(path, date_to_datetime(latest_modified_time))
+
             
                 # Write new sync data to json file
-                f.write(json.dumps(data))
+                f.write(json.dumps(data, indent=4))
 
 def sync(dir1, dir2):
+    """
+    Function to sync the content of two directories
+
+    Parameters:
+        dir1 : string path to first directory
+        dir2 : string path to second directory
+    """
 
     modify_sync_file(dir1)
     modify_sync_file(dir2)
 
     # load json data for dir1
     try:
-        with open (os.path.join(dir1, '.sync.json')) as json_file:
+        with open (os.path.join(dir1, '.sync')) as json_file:
             dir1_data = json.load(json_file)
     except json.JSONDecodeError:
         dir1_data = {}
 
     #load json data for dir2
     try:
-        with open (os.path.join(dir2, '.sync.json')) as json_file:
+        with open (os.path.join(dir2, '.sync')) as json_file:
             dir2_data = json.load(json_file)
     except json.JSONDecodeError:
         dir2_data = {}
 
-    print(dir1_data)
-    print(dir2_data)
-    for file1 in os.listdir(dir1):
-        for file2 in os.listdir(dir2):
-            if (file1 == file2):
-                pass
+    for file1 in dir1_data:
+        for file2 in dir2_data:
+            if (file1 == file2): # Same file so we sync them
+                      
+                # If hash is the same and different modification times
+                if (dir1_data[file1][0][1] == dir2_data[file2][0][1] and dir1_data[file1][0][0] != dir2_data[file2][0][0]):
+                    date1 = datetime.datetime.strptime(dir1_data[file1][0][0], '%Y-%m-%d %H:%M:%S %z')
+                    date2 = datetime.datetime.strptime(dir2_data[file2][0][0], '%Y-%m-%d %H:%M:%S %z')
+                    
+                    if date1 < date2:
+                        # date1 is earlier so repleace date2 with date1
+                        dir2_data[file2][0][0] = dir1_data[file1][0][0]
+                        change_modification_time(os.path.join(dir2, file2), date1)
+                    elif date2 < date1:
+                        # date2 is earlier so replace date1 with date2
+                        dir1_data[file1][0][0] = dir2_data[file2][0][0]
+                        change_modification_time(os.path.join(dir1, file1), date2)
+                    
+                    # write new data to sync files
+                    with open (os.path.join(dir1, '.sync'), 'w') as f:
+                        f.write(json.dumps(dir1_data, indent=4))
+                    with open (os.path.join(dir2, '.sync'), 'w') as f:
+                        f.write(json.dumps(dir2_data, indent=4))
+                else:
+                    # Check for file 1 digest in list of file 2 digests
+                    file1_hash = dir1_data[file1][0][1]
+                    for file2_data in dir2_data[file2]:
+                        if (file1_hash == file2_data[1] and file1_hash != dir2_data[file2][0][1]):
+                            # Change dir1's sync file
+                            dir1_data[file1].insert(0, dir2_data[file2][0])
+                            with open (os.path.join(dir1, '.sync'), 'w') as f:
+                                f.write(json.dumps(dir1_data, indent=4))
+
+                            # Update file in dir1
+                            shutil.copy2(os.path.join(dir2, file2), os.path.join(dir1, file1))
+                            break
+
+
+                    # Check for file 2 digest in list of file 1 digests
+                    file2_hash = dir2_data[file2][0][1]
+                    for file1_data in dir1_data[file1]:
+                        if (file2_hash == file1_data[1] and file2_hash != dir1_data[file1][0][1]):
+                            # Change dir2's sync file
+                            dir2_data[file2].insert(0, dir1_data[file1][0])
+                            with open (os.path.join(dir2, '.sync'), 'w') as f:
+                                f.write(json.dumps(dir2_data, indent=4))
+                            
+                            # Update file in dir2
+                            shutil.copy2(os.path.join(dir1, file1), os.path.join(dir2, file2))
+                            break
+                    
+                    # Check if same files have unique digests in both dirs
+                    unique_digest = True
+                    for data1 in dir1_data[file1]:
+                        for data2 in dir2_data[file2]:
+                            if (data1[1] == data2[1]):
+                                unique_digest = False
+                    
+                    if (unique_digest): # Keep file with latest modification time
+                        if (date_to_datetime(dir1_data[file1][0][0]) < date_to_datetime(dir2_data[file2][0][0])):
+                            # Change dir1's sync file
+                            dir1_data[file1].insert(0, dir2_data[file2][0])
+                            with open (os.path.join(dir1, '.sync'), 'w') as f:
+                                f.write(json.dumps(dir1_data, indent=4))
+                            
+                            # Update file in dir1
+                            shutil.copy2(os.path.join(dir2, file2), os.path.join(dir1, file1))
+                        
+                        elif (date_to_datetime(dir1_data[file1][0][0]) > date_to_datetime(dir2_data[file2][0][0])):
+                            # Change dir2's sync file
+                            dir2_data[file2].insert(0, dir1_data[file1][0])
+                            with open (os.path.join(dir2, '.sync'), 'w') as f:
+                                f.write(json.dumps(dir2_data, indent=4))
+                            
+                            # Update file in dir2
+                            shutil.copy2(os.path.join(dir1, file1), os.path.join(dir2, file2))
+
+
+
 
                   
 
 if __name__ == '__main__':
-    dir1 = sys.argv[1]
-    dir2 = sys.argv[2]
-    #sync("dir1", "dir2")
-    sync(dir1, dir2)
+    #dir1 = sys.argv[1]
+    #dir2 = sys.argv[2]
+    sync("dir1", "dir2")
+    #sync(dir1, dir2)
 
     
             
