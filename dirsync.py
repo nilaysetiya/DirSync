@@ -375,21 +375,21 @@ def sync(dir1, dir2):
 
 if __name__ == '__main__':
 
-    #if (len(sys.argv) == 3):
-    dir1 = "dir1"
-    dir2 = "dir2"
-    if (not os.path.exists(dir1) and not os.path.exists(dir2)):
-        print("Please make sure at least one directory exists")
-    elif (not os.path.exists(dir1)):
-        os.mkdir(dir1)
-        sync(dir1, dir2)
-    elif (not os.path.exists(dir2)):
-        os.mkdir(dir2)
-        sync(dir1, dir2)
+    if (len(sys.argv) == 3):
+        dir1 = sys.argv[1]
+        dir2 = sys.argv[2]
+        if (not os.path.exists(dir1) and not os.path.exists(dir2)):
+            print("Please make sure at least one directory exists")
+        elif (not os.path.exists(dir1)):
+            os.mkdir(dir1)
+            sync(dir1, dir2)
+        elif (not os.path.exists(dir2)):
+            os.mkdir(dir2)
+            sync(dir1, dir2)
+        else:
+            sync(dir1, dir2)
     else:
-        sync(dir1, dir2)
-    #else:
-        #print("Please provide a valid input")
+        print("Please provide a valid input")
 
     
             
