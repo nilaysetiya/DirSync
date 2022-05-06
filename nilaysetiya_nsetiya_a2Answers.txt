@@ -1,0 +1,37 @@
+Question 1:
+    There are a lot of nested for loops in the sync function which would make this implementation really
+    inefficient as the nested for loops would give this implementation a runtime of O(n^4). As a result, the 
+    run time would scale quartically as the number of file increases in each directory. Therefore, this
+    implementation would be really slow at synchronising with a large number of files due to the nested
+    for loop structures throughout dirsync.py
+
+    In the best case, we'll have to copy all files from one directory to another empty directory. The 
+    running time of the script drastically increases when you try synchronising various difference across
+    the two directories with a lot more files because of the nested for loop structure. 
+
+    Secondly, there is also an element of recursion which deals with subdirectories. This again would
+    make the run time of the script very long as its calling the sync function (containing nested for 
+    loops) over and over again for each sub directory. 
+
+    Therefore, this implementation's run time will increase drastically (will take a lot longer to 
+    finish running) with a larger number of files.
+
+Question 2:
+    One of the assumptions states that the paths to both directories are independent of each other.
+    In order words, one directory is not a parent of the other directory. This scenario is dangerous
+    as it will cause an infinite recursion if one directory is a parent of the other while the program 
+    tries to synchronise subdirectories. A solution to this situation would involve adding additional 
+    if conditionals and loops at the start that checks the absolute path for both directories to ensure
+    they are independent. If those conditionals find that one directory is a parent of the other, an 
+    error message is printed out and the user is asked for another input, thus making independent file 
+    path assumption unnecessary and making the sync program safer and more reliable.
+
+    Another assumption states that we can assume the program will have permissions to create files and
+    directories. We are assuming that the program will have permissions to edit files and directories
+    and permissions to delete files. This sync function uses os.remove() to remove files from the disk. 
+    This scenario is dangerous as accidental incorrect of the sync function may result in files being 
+    lost forever. These files could potentially include important backup files or important system files 
+    (such as files in root folders in Linux). A fix to this would be to add an extra facility similar 
+    to a recycling bin which is hidden from the user. Deleted files would end up here instead of being 
+    removed from the disk. This would give the user some time to recover accidentally deleted files, 
+    thus making the permissions assumption unnecessary and making the sync program safer and more reliable.

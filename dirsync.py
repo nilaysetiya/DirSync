@@ -332,10 +332,6 @@ def sync(dir1, dir2):
 
             # Delete file in dir1
             os.remove(os.path.join(dir1, del2))
-    
-    
-
-
 
     # Sub directories
     for folder1 in os.listdir(dir1):
@@ -375,20 +371,16 @@ def sync(dir1, dir2):
                 with open (os.path.join(dir1, '.sync'), 'w') as f:
                     f.write(json.dumps(dir1_data, indent=4))
             elif (os.path.isdir(os.path.join(dir2, f2_file))):
-                shutil.copytree(os.path.join(dir2, f2_file), os.path.join(dir1, f2_file))
-    
-    
-
-
-
-
-                  
+                shutil.copytree(os.path.join(dir2, f2_file), os.path.join(dir1, f2_file))                
 
 if __name__ == '__main__':
-    #dir1 = sys.argv[1]
-    #dir2 = sys.argv[2]
-    sync("dir1", "dir2")
-    #sync(dir1, dir2)
+
+    if (len(sys.argv) == 3):
+        dir1 = sys.argv[1]
+        dir2 = sys.argv[2]
+        sync(dir1, dir2)
+    else:
+        print("Please provide a valid input")
 
     
             
