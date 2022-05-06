@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from fileinput import filename
 import hashlib
 import os, sys, time
@@ -108,17 +109,20 @@ def modify_sync_file(directory):
                     path = os.path.join(directory, filename)
 
                     # Check if its a file
-                    if os.path.isfile(path) and filename[0] != '.':   
-                        latest_modified_time = data[filename][0][0]
-                        latest_hash = data[filename][0][1]
+                    if os.path.isfile(path) and filename[0] != '.': 
+                        try:  
+                            latest_modified_time = data[filename][0][0]
+                            latest_hash = data[filename][0][1]
 
-                        # Check if file has been modified
-                        if (gen_hash(path) != latest_hash):
-                            data[filename].insert(0, [modified_time(path), gen_hash(path)])
-                        
-                        if (modified_time(path) != latest_modified_time and gen_hash(path) == latest_hash):
-                            # Change modification time of the file
-                            change_modification_time(path, date_to_datetime(latest_modified_time))
+                            # Check if file has been modified
+                            if (gen_hash(path) != latest_hash and latest_hash != "deleted"):
+                                data[filename].insert(0, [modified_time(path), gen_hash(path)])
+                            
+                            if (modified_time(path) != latest_modified_time and gen_hash(path) == latest_hash):
+                                # Change modification time of the file
+                                change_modification_time(path, date_to_datetime(latest_modified_time))
+                        except Exception as e:
+                            data[filename] = [[modified_time(path), gen_hash(path)]]
 
             
                 # Write new sync data to json file
@@ -153,7 +157,10 @@ def sync(dir1, dir2):
     for file1 in dir1_data:
         for file2 in dir2_data:
             if (file1 == file2): # Same file so we sync them
-                      
+
+                if (dir1_data[file1][0][1] == "deleted" and dir2_data[file2][0][1] == "deleted"):
+                    continue
+
                 # If hash is the same and different modification times
                 if (dir1_data[file1][0][1] == dir2_data[file2][0][1] and dir1_data[file1][0][0] != dir2_data[file2][0][0]):
                     date1 = datetime.datetime.strptime(dir1_data[file1][0][0], '%Y-%m-%d %H:%M:%S %z')
@@ -226,6 +233,151 @@ def sync(dir1, dir2):
                             
                             # Update file in dir2
                             shutil.copy2(os.path.join(dir1, file1), os.path.join(dir2, file2))
+    
+    # Deletions
+
+    # Check for if file was deleted then created again
+    for del_file1 in os.listdir(dir1):
+        try:
+            if dir2_data[del_file1][0][1] == "deleted":
+                # deleted file has been recreated in dir2
+                shutil.copy2(os.path.join(dir1, del_file1), os.path.join(dir2, del_file1))
+
+                dir1_data[del_file1].insert(0, [modified_time(os.path.join(dir1, del_file1)), gen_hash(os.path.join(dir1, del_file1))])
+                dir2_data[del_file1].insert(0, [modified_time(os.path.join(dir2, del_file1)), gen_hash(os.path.join(dir2, del_file1))])
+
+                with open (os.path.join(dir1, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir1_data, indent=4))
+                
+                with open (os.path.join(dir2, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir2_data, indent=4))
+        except Exception as e:
+            continue
+
+    for del_file2 in os.listdir(dir2):
+        try:
+            if (dir1_data[del_file2][0][1] == "deleted"):
+                shutil.copy2(os.path.join(dir2, del_file2), os.path.join(dir1, del_file2))
+
+                dir1_data[del_file2].insert(0, [modified_time(os.path.join(dir1, del_file2)), gen_hash(os.path.join(dir1, del_file2))])
+                dir2_data[del_file2].insert(0, [modified_time(os.path.join(dir2, del_file2)), gen_hash(os.path.join(dir2, del_file2))])
+
+                with open (os.path.join(dir1, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir1_data, indent=4))
+                
+                with open (os.path.join(dir2, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir2_data, indent=4))
+        except Exception as e:
+            continue
+
+
+    dir1_files = []
+    dir2_files = []
+
+    for f1 in os.listdir(dir1):
+        if (not '.sync' in f1):
+            dir1_files.append(f1)
+    
+    for f2 in os.listdir(dir2):
+        if (not '.sync' in f2):
+            dir2_files.append(f2)
+    
+    # Check if file has been deleted in dir1
+    for del1 in dir1_data:
+        if (del1 not in dir1_files and del1 in dir2_files):
+            # File has been deleted in dir1
+            datenow = datetime.datetime.now()
+            utcnow = datetime.datetime.utcnow()
+            datenow = datenow.replace(microsecond=0)
+            utcnow = utcnow.replace(microsecond=0)
+            timezone = str(datenow - utcnow)
+            if '-' in timezone:
+                timezone = '-' + timezone[8:10] + timezone[11:13]
+            else:
+                timezone = '+' + timezone[0:2] + timezone[3:5]
+            
+            dir1_data[del1].insert(0, [str(datenow) + " " + str(timezone) , "deleted"])
+            dir2_data[del1].insert(0, [str(datenow) + " " + str(timezone) , "deleted"])
+
+            with open (os.path.join(dir1, '.sync'), 'w') as f:
+                f.write(json.dumps(dir1_data, indent=4))
+            
+            with open (os.path.join(dir2, '.sync'), 'w') as f:
+                f.write(json.dumps(dir2_data, indent=4))
+            # Delete file in dir2
+            os.remove(os.path.join(dir2, del1))
+    
+    # Check if file is deletd in dir2
+    for del2 in dir2_data:
+        if (del2 not in dir2_files and del2 in dir1_files):
+            # File has been deleted in dir2
+            datenow = datetime.datetime.now()
+            utcnow = datetime.datetime.utcnow()
+            datenow = datenow.replace(microsecond=0)
+            utcnow = utcnow.replace(microsecond=0)
+            timezone = str(datenow - utcnow)
+            if '-' in timezone:
+                timezone = '-' + timezone[8:10] + timezone[11:13]
+            else:
+                timezone = '+' + timezone[0:2] + timezone[3:5]
+            
+            dir1_data[del2].insert(0, [str(datenow) + " " + str(timezone) , "deleted"])
+            dir2_data[del2].insert(0, [str(datenow) + " " + str(timezone) , "deleted"])
+            
+            with open (os.path.join(dir1, '.sync'), 'w') as f:
+                f.write(json.dumps(dir1_data, indent=4))
+            
+            with open (os.path.join(dir2, '.sync'), 'w') as f:
+                f.write(json.dumps(dir2_data, indent=4))
+
+            # Delete file in dir1
+            os.remove(os.path.join(dir1, del2))
+    
+    
+
+
+
+    # Sub directories
+    for folder1 in os.listdir(dir1):
+        for folder2 in os.listdir(dir2):
+            if (folder1 == folder2 and os.path.isdir(os.path.join(dir1, folder1)) and os.path.isdir(os.path.join(dir2, folder2))):
+                sync(os.path.join(dir1, folder1), os.path.join(dir2, folder2))
+    
+    # Sync non mutual files
+    dir1_files = []
+    dir2_files = []
+
+    for f1 in os.listdir(dir1):
+        if (not '.sync' in f1):
+            dir1_files.append(f1)
+    
+    for f2 in os.listdir(dir2):
+        if (not '.sync' in f2):
+            dir2_files.append(f2)
+
+    for f1_file in dir1_files:
+        if (f1_file not in dir2_files):
+            # If its a file we update the sync file
+            if (os.path.isfile(os.path.join(dir1, f1_file))):
+                shutil.copy2(os.path.join(dir1, f1_file), os.path.join(dir2, f1_file))
+                dir2_data[f1_file] = dir1_data[f1_file]
+                with open (os.path.join(dir2, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir2_data, indent=4))
+            elif (os.path.isdir(os.path.join(dir1, f1_file))):
+                shutil.copytree(os.path.join(dir1, f1_file), os.path.join(dir2, f1_file))
+    
+    for f2_file in dir2_files:
+        if (f2_file not in dir1_files):
+            # If its a file we update the sync file
+            if (os.path.isfile(os.path.join(dir2, f2_file))):
+                shutil.copy2(os.path.join(dir2, f2_file), os.path.join(dir1, f2_file))
+                dir1_data[f2_file] = dir2_data[f2_file]
+                with open (os.path.join(dir1, '.sync'), 'w') as f:
+                    f.write(json.dumps(dir1_data, indent=4))
+            elif (os.path.isdir(os.path.join(dir2, f2_file))):
+                shutil.copytree(os.path.join(dir2, f2_file), os.path.join(dir1, f2_file))
+    
+    
 
 
 
